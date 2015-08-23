@@ -1,0 +1,68 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Qstata"
+date: "Aguest 23, 2015"
+output: html_document
+---
+
+## Introduction 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. 
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har .
+
+## Loading and Pre-processing Data
+By summarize the training data set, we found that the first 7 columns: X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, and num_window are obviously not related to predict the outcomes. Therefore, we firstly remove the first 7 columns.
+Then we remove all variables that have one unique value by using the function "nearZeroVar" of caret package as follow.
+
+```{r,  cache=TRUE}
+library(caret)
+# Read data
+pml <- read.csv("pml-training.csv",
+                     stringsAsFactors=FALSE)
+# Data transformation
+# manner in which they did the exercise, which is the "classe" variable in the training set.
+pml$classe <- as.factor(pml$classe)
+
+# remove the first 7 columns, which are not related to predict the outcomes.
+pml <- pml[,-c(1,2,3,4,5,6,7)]
+
+# Data processing: To remove all variables that have one unique value
+pml <- pml[,-nearZeroVar(pml)]
+
+```
+
+We split the training set for cross validation by using the parameters as follow. Furthmore, we use "KnnImpute"" method to impute the missing values and standardized those variables by using PCA to reduce features accordingly.
+```{r}
+set.seed(9836)
+inTrain <- createDataPartition(y=pml$classe, p=0.7, list=FALSE)
+training <- pml[inTrain,]
+testing <- pml[-inTrain,]
+
+# In order to impute the missing values,we use KnnImpute method and 
+# we standardized those variables and using PCA to reduce features.
+
+preObj <- preProcess(training[,-length(training)],method=c("center", "scale", "knnImpute", "pca"), thresh=0.9)
+clean_data <- predict(preObj, training[,-ncol(training)])
+```
+
+
+## Prediction with cross validation
+We use Knn method to build model based on  clean data set from the above processing. We use testing data to evaluate the performance of our model. 
+
+```{r}
+modelFit <- train(training$classe ~.,data=clean_data, method="knn")
+test1 <- predict(preObj, testing[,-length(testing)])
+c1 <- confusionMatrix(testing$classe, predict(modelFit,test1))
+fitted.Accuracy <- c1$overall["Accuracy"]
+print(c1)
+```
+The overall accuracy of the final fitted model is 'r fitted.Accuracy'. 
+
+## Validation of testing data set
+Finally, we load the testing data file and predict the reult as the following:
+```{r}
+pml.testing <- read.csv("pml-testing.csv", stringsAsFactors=FALSE)
+pml.testing <- pml.testing[,names(pml.testing) %in% colnames(training)]
+
+test2 <- predict(preObj, pml.testing)
+predict_result <- predict(modelFit, test2)
+```
